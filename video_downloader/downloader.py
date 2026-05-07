@@ -1,8 +1,17 @@
 """Core download logic using yt-dlp."""
 
+import os
+import sys
 import threading
 import yt_dlp
 from .extractor import find_video_urls
+
+
+def _ffmpeg_path():
+    """Return path to bundled ffmpeg when frozen, else None (use system PATH)."""
+    if getattr(sys, "frozen", False):
+        return os.path.join(sys._MEIPASS, "ffmpeg.exe")
+    return None
 
 
 QUALITY_FORMATS = {
@@ -58,6 +67,9 @@ class Downloader:
             "quiet": True,
             "no_warnings": False,
         }
+        ffmpeg = _ffmpeg_path()
+        if ffmpeg:
+            opts["ffmpeg_location"] = ffmpeg
         if is_audio:
             opts["postprocessors"] = [{
                 "key": "FFmpegExtractAudio",
