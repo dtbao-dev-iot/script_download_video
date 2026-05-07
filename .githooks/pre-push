@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# pre-push: Validate branch name follows branch naming convention
+# Based on branch naming convention
+# Part of project setup — do not remove
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Allow main long-lived branches
+if [[ "$BRANCH" == "main" || "$BRANCH" == "developing" || "$BRANCH" == "HEAD" ]]; then
+    exit 0
+fi
+
+# Standard branch pattern (with ticket):
+#   <type>/<ticket-number>-<description>
+# e.g. feature/uart-123-add-dma-support
+#      bugfix/gpio-456-fix-pin-config
+#      hotfix/sec-789-patch-vulnerability
+#
+# Standard branch pattern (without ticket):
+#   <type>/<description>
+# e.g. refactor/template-lib
+#      docs/update-readme
+#      chore/migrate-to-cmake
+STANDARD_PATTERN="^(feature|bugfix|hotfix|chore|docs|test|refactor)/([a-z]+-[0-9]+-[a-z0-9-]+|[a-z0-9-]+)$"
+
+# Release branch pattern: release/vX.Y.Z
+# e.g. release/v25.01.00   (firmware)
+#      release/v1.2.0       (library)
+RELEASE_PATTERN="^release/v[0-9]+\.[0-9]+\.[0-9]+$"
+
+if [[ ! "$BRANCH" =~ $STANDARD_PATTERN && ! "$BRANCH" =~ $RELEASE_PATTERN ]]; then
+    echo ""
+    echo "[pre-push] ERROR: Branch name '$BRANCH' does not follow the naming convention."
+    echo ""
+    echo "  Standard pattern (with ticket): <type>/<ticket-number>-<description>"
+    echo "    Examples:"
+    echo "      feature/uart-123-add-dma-support"
+    echo "      bugfix/gpio-456-fix-pin-config"
+    echo "      hotfix/sec-789-patch-vulnerability"
+    echo "      chore/build-101-update-cmake-version"
+    echo "      docs/doc-321-update-api-reference"
+    echo "      test/qa-111-add-uart-unit-tests"
+    echo "      refactor/core-444-simplify-state-machine"
+    echo ""
+    echo "  Standard pattern (without ticket): <type>/<description>"
+    echo "    Examples:"
+    echo "      refactor/template-lib"
+    echo "      docs/update-readme"
+    echo "      chore/migrate-to-cmake"
+    echo "      feature/add-ble-support"
+    echo "      bugfix/fix-null-pointer"
+    echo ""
+    echo "  Release pattern  : release/v<major>.<minor>.<patch>"
+    echo "    Examples:"
+    echo "      release/v25.01.00   (firmware)"
+    echo "      release/v1.2.0      (library)"
+    echo ""
+    echo "  Allowed base branches: main, developing"
+    echo ""
+    exit 1
+fi
+
+exit 0

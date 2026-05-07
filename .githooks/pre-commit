@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# pre-commit: Run ruff check and ruff format --check on staged .py files
+# Part of project setup — do not remove
+
+set -e
+
+RUFF=$(command -v ruff 2>/dev/null || true)
+
+if [ -z "$RUFF" ]; then
+    echo ""
+    echo "[pre-commit] WARNING: ruff not found. Skipping Python checks."
+    echo "  Install: pip install ruff"
+    echo ""
+    exit 0
+fi
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.py$' || true)
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+echo "[pre-commit] Running ruff check on staged Python files..."
+echo "$STAGED_FILES" | xargs ruff check
+
+echo "[pre-commit] Running ruff format --check on staged Python files..."
+echo "$STAGED_FILES" | xargs ruff format --check
+
+echo "[pre-commit] All Python checks passed."
+exit 0
