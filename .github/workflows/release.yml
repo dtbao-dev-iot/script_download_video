@@ -1,66 +1,42 @@
 name: Release
 
+# Trigger on tags matching the project version format.
+# Python package: use v[0-9]* (e.g. v0.1.0)
 on:
   push:
     tags:
-      - "v*.*.*"
+      - 'v[0-9]*'
 
 permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    runs-on: windows-latest
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0          # full history for release notes
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt pyinstaller
-
-      - name: Build exe
-        run: python build_app.py
-
-      - name: Generate release notes
-        id: notes
-        shell: bash
+      - name: Verify changelog exists
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          PREV=$(git tag --sort=-version:refname | grep -v "^${TAG}$" | head -1)
-
-          echo "## What's Changed" > notes.md
-          echo "" >> notes.md
-
-          if [ -n "$PREV" ]; then
-            echo "**Full changelog:** [\`${PREV}\` → \`${TAG}\`](${{ github.server_url }}/${{ github.repository }}/compare/${PREV}...${TAG})" >> notes.md
-            echo "" >> notes.md
-            git log "${PREV}..HEAD" --pretty=format:"- %s ([%h](${{ github.server_url }}/${{ github.repository }}/commit/%H))" >> notes.md
-          else
-            git log --pretty=format:"- %s ([%h](${{ github.server_url }}/${{ github.repository }}/commit/%H))" >> notes.md
+          CHANGELOG_FILE="docs/CHANGELOG/${{ steps.version.outputs.VERSION }}.md"
+          if [ ! -f "$CHANGELOG_FILE" ]; then
+            echo "ERROR: $CHANGELOG_FILE not found."
+            echo "Create a changelog entry before releasing."
+            exit 1
           fi
-
-          echo "" >> notes.md
-          echo "" >> notes.md
-          echo "## Download" >> notes.md
-          echo "| File | Platform |" >> notes.md
-          echo "|------|----------|" >> notes.md
-          echo "| \`VideoDownloader.exe\` | Windows x64 |" >> notes.md
-
-          cat notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "Video Downloader ${{ github.ref_name }}"
-          body_path: notes.md
-          files: dist/VideoDownloader.exe
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: ${{ steps.version.outputs.VERSION }}
+          body_path: docs/CHANGELOG/${{ steps.version.outputs.VERSION }}.md
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+          prerelease: false
