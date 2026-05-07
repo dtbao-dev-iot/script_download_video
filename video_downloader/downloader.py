@@ -88,11 +88,13 @@ class Downloader:
         # Fallback: scrape page for video URL
         if self.on_log:
             self.on_log("  yt-dlp unsupported — scraping page...")
-        candidates = find_video_urls(url, log=self.on_log)
+        candidates, page_title = find_video_urls(url, log=self.on_log)
         if not candidates:
             return False, "No video stream found on page"
 
         opts["http_headers"] = {"Referer": url}
+        if page_title:
+            opts["outtmpl"] = f"{output_dir}/{page_title}.%(ext)s"
         for candidate in candidates:
             if self._cancelled:
                 return False, "Cancelled"

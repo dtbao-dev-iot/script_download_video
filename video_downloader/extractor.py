@@ -31,11 +31,18 @@ def _unique(seq):
     return [x for x in seq if not (x in seen or seen.add(x))]
 
 
+def _sanitize_filename(name):
+    """Remove characters invalid in filenames and trim length."""
+    name = re.sub(r'[\\/*?:"<>|]', "", name)
+    return name.strip()[:100] or None
+
+
 def scrape_page(url, log=None):
     """
-    Fetch *url* and return (direct_urls, iframe_urls).
+    Fetch *url* and return (direct_urls, iframe_urls, page_title).
     direct_urls: list of m3u8/mp4 URLs found in page source.
     iframe_urls: list of iframe src values to try recursively.
+    page_title: sanitized <title> text, or None.
     """
     if log:
         log(f"Scraping page: {url}")
@@ -45,10 +52,14 @@ def scrape_page(url, log=None):
     except Exception as e:
         if log:
             log(f"Failed to fetch page: {e}")
-        return [], []
+        return [], [], None
 
     html = resp.text
     soup = BeautifulSoup(html, "html.parser")
+
+    # Extract page title for meaningful filename
+    title_tag = soup.find("title")
+    page_title = _sanitize_filename(title_tag.get_text()) if title_tag else None
 
     # Collect raw text: full HTML + all <script> contents
     texts = [html]
@@ -71,22 +82,23 @@ def scrape_page(url, log=None):
         if src and src.startswith("http"):
             iframes.append(src)
 
-    return _unique(direct), _unique(iframes)
+    return _unique(direct), _unique(iframes), page_title
 
 
 def find_video_urls(page_url, log=None):
     """
     Try to find playable video URLs from *page_url*.
     Recursively checks iframes one level deep.
-    Returns a list of candidate URLs (m3u8 preferred first).
+    Returns (candidates, page_title) where candidates is a list of URLs
+    (m3u8 preferred first) and page_title is the sanitized page <title> or None.
     """
-    direct, iframes = scrape_page(page_url, log)
+    direct, iframes, page_title = scrape_page(page_url, log)
 
     # Also try each iframe page
     for iframe_url in iframes:
         if log:
             log(f"Checking iframe: {iframe_url}")
-        d2, _ = scrape_page(iframe_url, log)
+        d2, _, _ = scrape_page(iframe_url, log)
         direct.extend(d2)
 
     # Sort: m3u8 first, then mp4
@@ -94,4 +106,4 @@ def find_video_urls(page_url, log=None):
     mp4 = [u for u in _unique(direct) if ".mp4" in u and u not in m3u8]
     rest = [u for u in _unique(direct) if u not in m3u8 and u not in mp4]
 
-    return m3u8 + mp4 + rest
+    return m3u8 + mp4 + rest, page_title
