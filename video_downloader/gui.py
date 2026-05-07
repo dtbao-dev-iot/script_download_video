@@ -21,7 +21,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Video Downloader")
-        self.resizable(True, False)
+        self.resizable(False, False)
         self._urls = []
         self.downloader = Downloader(
             on_progress=self._on_progress,
