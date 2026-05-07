@@ -198,7 +198,7 @@ class App(tk.Tk):
 
         self.after(0, _update)
 
-    def _on_all_done(self):
+    def _on_all_done(self, cancelled):
         def _update():
             self.dl_btn.config(state="normal")
             self.cancel_btn.config(state="disabled")
@@ -207,8 +207,11 @@ class App(tk.Tk):
                 if "Done" in self.queue_tree.item(iid)["values"][0]
             )
             total = len(self._urls)
-            self._log(f"\nFinished: {done}/{total} succeeded.")
-            messagebox.showinfo("Done", f"{done}/{total} downloads completed.\nSaved to: {self.out_var.get()}")
+            if cancelled:
+                self._log(f"\nCancelled. {done}/{total} completed before cancel.")
+            else:
+                self._log(f"\nFinished: {done}/{total} succeeded.")
+                messagebox.showinfo("Done", f"{done}/{total} downloads completed.\nSaved to: {self.out_var.get()}")
         self.after(0, _update)
 
     # ------------------------------------------------------------------  log

@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # full history for release notes
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build exe
+        run: python build_app.py
+
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PREV=$(git tag --sort=-version:refname | grep -v "^${TAG}$" | head -1)
+
+          echo "## What's Changed" > notes.md
+          echo "" >> notes.md
+
+          if [ -n "$PREV" ]; then
+            echo "**Full changelog:** [\`${PREV}\` → \`${TAG}\`](${{ github.server_url }}/${{ github.repository }}/compare/${PREV}...${TAG})" >> notes.md
+            echo "" >> notes.md
+            git log "${PREV}..HEAD" --pretty=format:"- %s ([%h](${{ github.server_url }}/${{ github.repository }}/commit/%H))" >> notes.md
+          else
+            git log --pretty=format:"- %s ([%h](${{ github.server_url }}/${{ github.repository }}/commit/%H))" >> notes.md
+          fi
+
+          echo "" >> notes.md
+          echo "" >> notes.md
+          echo "## Download" >> notes.md
+          echo "| File | Platform |" >> notes.md
+          echo "|------|----------|" >> notes.md
+          echo "| \`VideoDownloader.exe\` | Windows x64 |" >> notes.md
+
+          cat notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Video Downloader ${{ github.ref_name }}"
+          body_path: notes.md
+          files: dist/VideoDownloader.exe
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}

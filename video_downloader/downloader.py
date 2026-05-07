@@ -15,12 +15,16 @@ QUALITY_FORMATS = {
 }
 
 
+class _CancelSignal(Exception):
+    """Raised from progress hook to interrupt yt-dlp without being swallowed internally."""
+
+
 class Downloader:
     def __init__(self, on_progress=None, on_log=None, on_item_done=None, on_all_done=None):
         self.on_progress = on_progress      # callback(pct: float)
         self.on_log = on_log                # callback(msg: str)
         self.on_item_done = on_item_done    # callback(index: int, success: bool, msg: str)
-        self.on_all_done = on_all_done      # callback()
+        self.on_all_done = on_all_done      # callback(cancelled: bool)
         self._thread = None
         self._cancelled = False
 
@@ -28,7 +32,7 @@ class Downloader:
 
     def _progress_hook(self, d):
         if self._cancelled:
-            raise yt_dlp.utils.DownloadError("Cancelled by user")
+            raise _CancelSignal()
         status = d.get("status")
         if status == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
@@ -69,11 +73,17 @@ class Downloader:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([url])
             return True, "Done"
+        except _CancelSignal:
+            return False, "Cancelled"
         except yt_dlp.utils.DownloadError as e:
             if self._cancelled:
                 return False, "Cancelled"
             if "Unsupported URL" not in str(e):
                 return False, str(e)
+        except Exception as e:
+            if self._cancelled:
+                return False, "Cancelled"
+            return False, str(e)
 
         # Fallback: scrape page for video URL
         if self.on_log:
@@ -92,6 +102,8 @@ class Downloader:
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     ydl.download([candidate])
                 return True, "Done"
+            except _CancelSignal:
+                return False, "Cancelled"
             except Exception:
                 continue
         return False, "All candidate URLs failed"
@@ -100,25 +112,26 @@ class Downloader:
 
     def _run(self, urls, output_dir, fmt):
         self._cancelled = False
-        for idx, url in enumerate(urls):
-            if self._cancelled:
+        try:
+            for idx, url in enumerate(urls):
+                if self._cancelled:
+                    if self.on_item_done:
+                        self.on_item_done(idx, False, "Cancelled")
+                    continue
+                if self.on_log:
+                    self.on_log(f"\n[{idx + 1}/{len(urls)}] {url}")
+                if self.on_progress:
+                    self.on_progress(0.0)
+
+                success, msg = self._download_one(url, output_dir, fmt)
+
+                if self.on_progress:
+                    self.on_progress(100.0 if success else 0.0)
                 if self.on_item_done:
-                    self.on_item_done(idx, False, "Cancelled")
-                continue
-            if self.on_log:
-                self.on_log(f"\n[{idx + 1}/{len(urls)}] {url}")
-            if self.on_progress:
-                self.on_progress(0.0)
-
-            success, msg = self._download_one(url, output_dir, fmt)
-
-            if self.on_progress:
-                self.on_progress(100.0 if success else 0.0)
-            if self.on_item_done:
-                self.on_item_done(idx, success, msg)
-
-        if self.on_all_done:
-            self.on_all_done()
+                    self.on_item_done(idx, success, msg)
+        finally:
+            if self.on_all_done:
+                self.on_all_done(self._cancelled)
 
     def start(self, urls, output_dir, fmt="Best (auto)"):
         """urls: list[str]. Returns False if already running."""
