@@ -35,11 +35,11 @@ jobs:
       - name: Run pytest
         run: |
           if [ -d "tests" ]; then
-            pytest; code=$?
-            if [ $code -eq 5 ]; then
+            pytest || code=$?
+            if [ "${code:-0}" -eq 5 ]; then
               echo "No tests collected yet, skipping."
-            elif [ $code -ne 0 ]; then
-              exit $code
+            elif [ "${code:-0}" -ne 0 ]; then
+              exit "${code}"
             fi
           else
             echo "No tests/ directory found. Skipping test step."
