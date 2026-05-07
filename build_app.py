@@ -1,14 +1,22 @@
 """Build VideoDownloader.exe using PyInstaller."""
 
+import io
 import shutil
 import subprocess
 import sys
+import urllib.request
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).parent
 DIST = ROOT / "dist"
 BUILD = ROOT / "build"
 SPEC = ROOT / "VideoDownloader.spec"
+
+FFMPEG_URL = (
+    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
+    "ffmpeg-master-latest-win64-gpl.zip"
+)
 
 
 def run(cmd):
@@ -26,6 +34,28 @@ def clean():
             print(f"Removed: {path}")
 
 
+def fetch_ffmpeg():
+    """Download ffmpeg.exe from BtbN static builds and return its path."""
+    dest = ROOT / "ffmpeg.exe"
+    if dest.exists():
+        print(f"ffmpeg.exe already present, skipping download.")
+        return dest
+
+    print(f"Downloading ffmpeg from {FFMPEG_URL} ...")
+    with urllib.request.urlopen(FFMPEG_URL) as resp:
+        data = resp.read()
+
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        ffmpeg_entry = next(
+            n for n in zf.namelist()
+            if n.endswith("bin/ffmpeg.exe")
+        )
+        dest.write_bytes(zf.read(ffmpeg_entry))
+
+    print(f"ffmpeg.exe saved to {dest}")
+    return dest
+
+
 def main():
     print("=== Video Downloader — Build ===\n")
 
@@ -38,14 +68,17 @@ def main():
 
     clean()
 
+    ffmpeg_exe = fetch_ffmpeg()
+
     run([
         sys.executable, "-m", "PyInstaller",
-        "--onefile",            # single .exe
-        "--windowed",           # no console window
+        "--onefile",
+        "--windowed",
         "--name", "VideoDownloader",
-        "--collect-all", "yt_dlp",      # include all yt-dlp extractors
+        "--collect-all", "yt_dlp",
         "--hidden-import", "bs4",
         "--hidden-import", "requests",
+        "--add-binary", f"{ffmpeg_exe};.",
         str(ROOT / "main.py"),
     ])
 
@@ -64,6 +97,7 @@ def main():
         shutil.rmtree(BUILD)
     if SPEC.is_file():
         SPEC.unlink()
+    ffmpeg_exe.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
